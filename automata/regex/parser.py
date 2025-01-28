@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import re
+import string
 from collections import deque
 from itertools import chain, count, product, repeat
 from typing import AbstractSet, Deque, Dict, Iterable, List, Optional, Set, Tuple, Type
@@ -26,9 +27,20 @@ from automata.regex.postfix import (
 
 BuilderTransitionsT = Dict[int, Dict[str, Set[int]]]
 
-RESERVED_CHARACTERS = frozenset(
-    ("*", "|", "(", ")", "?", " ", "\t", "&", "+", ".", "^", "{", "}")
-)
+RESERVED_CHARACTERS: frozenset[str] = frozenset(())
+
+ASCII_CHARACTERS = set(chr(i) for i in range(128))
+DIGITS = set(string.digits)
+LETTERS = set(string.ascii_letters)
+WHITESPACE = set(" \t\n\r\f\v")
+CHARACTER_CLASS_TRANSLATIONS = {
+    r"\d": DIGITS,
+    r"\D": ASCII_CHARACTERS - DIGITS,
+    r"\s": WHITESPACE,
+    r"\S": ASCII_CHARACTERS - WHITESPACE,
+    r"\w": LETTERS | DIGITS | set("_"),
+    r"\W": ASCII_CHARACTERS - LETTERS - DIGITS - set("_"),
+}
 
 
 class NFARegexBuilder:
@@ -70,7 +82,6 @@ class NFARegexBuilder:
         """
         Initialize this builder accepting only the given string literal
         """
-
         transitions: BuilderTransitionsT = {
             next(counter): {symbol: set()} for symbol in literal
         }
@@ -431,6 +442,29 @@ class QuantifierToken(PostfixOperator[NFARegexBuilder]):
         return left
 
 
+class SingularQuantifierToken(PostfixOperator[NFARegexBuilder]):
+    """Subclass of postfix operator for repeating an expression a fixed number
+    of times."""
+
+    __slots__: Tuple[str, ...] = ("bound",)
+
+    def __init__(self, text: str, bound: int) -> None:
+        super().__init__(text)
+        self.bound = bound
+
+    @classmethod
+    def from_match(cls: Type[Self], match: re.Match) -> SingularQuantifierToken:
+        bound = int(match.group(1))
+        return cls(match.group(), bound)
+
+    def get_precedence(self) -> int:
+        return 3
+
+    def op(self, left: NFARegexBuilder) -> NFARegexBuilder:
+        left.repeat(self.bound, self.bound)
+        return left
+
+
 class OptionToken(PostfixOperator[NFARegexBuilder]):
     """Subclass of postfix operator defining the option operator."""
 
@@ -459,6 +493,23 @@ class ConcatToken(InfixOperator[NFARegexBuilder]):
 
 class StringToken(Literal[NFARegexBuilder]):
     """Subclass of literal token defining a string literal."""
+
+    __slots__: Tuple[str, ...] = ("counter",)
+
+    def __init__(self, text: str, counter: count) -> None:
+        super().__init__(text)
+        self.counter = counter
+
+    @classmethod
+    def from_match(cls: Type[Self], match: re.Match) -> NoReturn:
+        raise NotImplementedError
+
+    def val(self) -> NFARegexBuilder:
+        return NFARegexBuilder.from_string_literal(self.text, self.counter)
+
+
+class EscapeToken(Literal[NFARegexBuilder]):
+    """Subclass of literal token defining an escape character."""
 
     __slots__: Tuple[str, ...] = ("counter",)
 
@@ -531,6 +582,7 @@ def add_concat_and_empty_string_tokens(
                 ):
                     final_token_list.append(StringToken("", state_name_counter))
 
+    print(final_token_list)
     return final_token_list
 
 
@@ -549,6 +601,10 @@ def get_regex_lexer(
     lexer.register_token(KleenePlusToken.from_match, r"\+")
     lexer.register_token(OptionToken.from_match, r"\?")
     lexer.register_token(QuantifierToken.from_match, r"\{(.*?),(.*?)\}")
+    lexer.register_token(SingularQuantifierToken.from_match, r"\{(.*?)\}")
+    lexer.register_token(
+        lambda match: EscapeToken(match.group(1), state_name_counter), r"\\(.)"
+    )
     lexer.register_token(
         lambda match: WildcardToken(match.group(), input_symbols, state_name_counter),
         r"\.",
@@ -560,11 +616,104 @@ def get_regex_lexer(
     return lexer
 
 
+def create_alternatives(characters: set[str]) -> str:
+    """Create alternatives for a set of characters."""
+    return "(" + "|".join(f"{char}" for char in characters) + ")"
+
+
+def is_character_class(regexstr: str) -> bool:
+    """Check if regexstr is a character class."""
+    return regexstr in CHARACTER_CLASS_TRANSLATIONS.keys()
+
+
+def preprocess_range(regexstr: str) -> str:
+    """Replace single character range with alternatives."""
+    # remove brackets
+    regexstr = regexstr[1:-1]
+
+    # combine escaped characters
+    index = 0
+    escaped_characters = []
+    while index < len(regexstr):
+        char = regexstr[index]
+        if char == "\\":
+            char = "\\" + regexstr[index + 1]
+            index += 1
+        escaped_characters.append(char)
+        index += 1
+
+    index = 0
+    characters: set[str] = set()
+    while index < len(escaped_characters):
+        if (
+            index + 1 < len(escaped_characters)
+            and escaped_characters[index + 1] == "-"
+            and index + 2 < len(escaped_characters)
+        ):
+            start = escaped_characters[index]
+            end = escaped_characters[index + 2]
+            # check if range is valid
+            if ord(end) < ord(start):
+                raise exceptions.InvalidRegexError(
+                    f"Range out of order: {start}-{end}."
+                )
+            # check if range contains character classes
+            if is_character_class(start) or is_character_class(end):
+                raise exceptions.InvalidRegexError(
+                    f"Range cannot contain character classes: {start}-{end}."
+                )
+            # add range to set
+            characters.update(set(chr(i) for i in range(ord(start), ord(end) + 1)))
+            index += 3
+        else:
+            characters.add(escaped_characters[index])
+            index += 1
+
+    return create_alternatives(characters)
+
+
+def preprocess_ranges(regexstr: str) -> str:
+    """Replace ranges with alternatives."""
+    # find all ranges in regexstr
+    ranges = re.findall(r"\[.*?\]", regexstr)
+    # replace each range with alternative definition
+    for r in ranges:
+        # check if range has been replaced already
+        if r in regexstr:
+            regexstr = regexstr.replace(r, preprocess_range(r))
+
+    return regexstr
+
+
+def preprocess_character_classes(regexstr: str) -> str:
+    """Replace character classes with alternatives."""
+    for char_class in CHARACTER_CLASS_TRANSLATIONS.keys():
+        # replace character classes with alternative over possible characters
+        if char_class in regexstr:
+            regexstr = regexstr.replace(
+                char_class,
+                create_alternatives(CHARACTER_CLASS_TRANSLATIONS[char_class]),
+            )
+    return regexstr
+
+
+def preprocess_regex(regexstr: str) -> str:
+    """Preprocess regexstr to support character classes and ranges."""
+
+    regexstr = preprocess_ranges(regexstr)
+
+    regexstr = preprocess_character_classes(regexstr)
+
+    return regexstr
+
+
 def parse_regex(regexstr: str, input_symbols: AbstractSet[str]) -> NFARegexBuilder:
     """Return an NFARegexBuilder corresponding to regexstr."""
 
     if len(regexstr) == 0:
         return NFARegexBuilder.from_string_literal(regexstr, count(0))
+
+    regexstr = preprocess_regex(regexstr)
 
     state_name_counter = count(0)
 
