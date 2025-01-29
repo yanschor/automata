@@ -582,7 +582,6 @@ def add_concat_and_empty_string_tokens(
                 ):
                     final_token_list.append(StringToken("", state_name_counter))
 
-    print(final_token_list)
     return final_token_list
 
 
