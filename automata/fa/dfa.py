@@ -441,7 +441,7 @@ class DFA(fa.FA):
     def _validate_transitions(self, start_state: DFAStateT, paths: DFAPathT) -> None:
         """Raise an error if transitions are missing or invalid."""
         self._validate_transition_missing_symbols(start_state, paths)
-        self._validate_transition_invalid_symbols(start_state, paths)
+        # self._validate_transition_invalid_symbols(start_state, paths)
         self._validate_transition_end_states(start_state, paths)
 
     def validate(self) -> None:

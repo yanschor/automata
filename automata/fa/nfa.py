@@ -217,14 +217,15 @@ class NFA(fa.FA):
             The NFA accepting the language of the input regex.
         """
 
+        # TODO: rewrite this, should accept either all ASCII or all Unicode
         if input_symbols is None:
-            input_symbols = frozenset(regex) - RESERVED_CHARACTERS
-        else:
-            conflicting_symbols = RESERVED_CHARACTERS & input_symbols
-            if conflicting_symbols:
-                raise exceptions.InvalidSymbolError(
-                    f"Invalid input symbols: {conflicting_symbols}"
-                )
+            input_symbols = frozenset(regex) # - RESERVED_CHARACTERS
+        # else:
+        #     conflicting_symbols = RESERVED_CHARACTERS & input_symbols
+        #     if conflicting_symbols:
+        #         raise exceptions.InvalidSymbolError(
+        #             f"Invalid input symbols: {conflicting_symbols}"
+        #         )
 
         nfa_builder = parse_regex(regex, input_symbols)
 
@@ -263,7 +264,7 @@ class NFA(fa.FA):
             If this NFA has invalid symbols in the transition dictionary.
         """
         for start_state, paths in self.transitions.items():
-            self._validate_transition_invalid_symbols(start_state, paths)
+            # self._validate_transition_invalid_symbols(start_state, paths)
             self._validate_transition_end_states(start_state, paths)
         self._validate_initial_state()
         self._validate_initial_state_transitions()
