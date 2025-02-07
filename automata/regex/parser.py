@@ -27,7 +27,7 @@ from automata.regex.postfix import (
 
 BuilderTransitionsT = Dict[int, Dict[str, Set[int]]]
 
-RESERVED_CHARACTERS: frozenset[str] = frozenset(())
+RESERVED_CHARACTERS: frozenset[str] = frozenset(("*", "|", "(", ")", "?", "&", "+", ".", "^", "{", "}", '"', "[", "]", "\\"))
 
 ASCII_CHARACTERS = set(chr(i) for i in range(128))
 DIGITS = set(string.digits)
@@ -609,7 +609,7 @@ def get_regex_lexer(
         r"\.",
     )
     lexer.register_token(
-        lambda match: StringToken(match.group(), state_name_counter), r"\S"
+        lambda match: StringToken(match.group(), state_name_counter), r"."
     )
 
     return lexer
@@ -650,7 +650,13 @@ def preprocess_range(regexstr: str) -> str:
             and index + 2 < len(escaped_characters)
         ):
             start = escaped_characters[index]
+            if len(start) > 1: # remove backslash
+                start = start[1]
+
             end = escaped_characters[index + 2]
+            if len(end) > 1: # remove backslash
+                end = end[1]
+
             # check if range is valid
             if ord(end) < ord(start):
                 raise exceptions.InvalidRegexError(
@@ -668,7 +674,16 @@ def preprocess_range(regexstr: str) -> str:
             characters.add(escaped_characters[index])
             index += 1
 
-    return create_alternatives(characters)
+    new_characters = set()
+
+    # add backslashes to reserved characters
+    for character in characters:
+        if character in RESERVED_CHARACTERS:
+            new_char = f"\\{character}"
+            new_characters.add(new_char)
+        else:
+            new_characters.add(character)
+    return create_alternatives(new_characters)
 
 
 def preprocess_ranges(regexstr: str) -> str:
@@ -696,12 +711,35 @@ def preprocess_character_classes(regexstr: str) -> str:
     return regexstr
 
 
+def contains_xml_unicode(regex: str) -> bool:
+    return re.search(r"&#x([0-9A-Fa-f]{4});", regex) is not None
+
+
+def xml_to_python_unicode(xml_str: str) -> str:
+    """Replace every XML-formatted unicode character in the string with the corresponding python unicode character."""
+    xml_unicode_regex = r"&#x([0-9A-Fa-f]{4});"
+    return re.sub(xml_unicode_regex, replacement, xml_str)
+
+
+def replacement(match: re.Match) -> str:
+    character = chr(int(match.group(1), 16))
+    if character in RESERVED_CHARACTERS:
+        return f"\\{character}"
+    return character
+
+
 def preprocess_regex(regexstr: str) -> str:
     """Preprocess regexstr to support character classes and ranges."""
 
-    regexstr = preprocess_ranges(regexstr)
+    # replace XML-formatted unicode characters with python unicode characters
+    if contains_xml_unicode(regexstr):
+        regexstr = xml_to_python_unicode(regexstr)
 
+    # replace character classes with alternatives
     regexstr = preprocess_character_classes(regexstr)
+
+    # replace ranges with alternatives
+    regexstr = preprocess_ranges(regexstr)
 
     return regexstr
 
