@@ -27,7 +27,7 @@ from automata.regex.postfix import (
 
 BuilderTransitionsT = Dict[int, Dict[str, Set[int]]]
 
-RESERVED_CHARACTERS: frozenset[str] = frozenset(("*", "|", "(", ")", "?", "&", "+", ".", "^", "{", "}"))
+RESERVED_CHARACTERS: frozenset[str] = frozenset(("*", "|", "(", ")", "?", "&", "+", ".", "^", "{", "}", '"', "[", "]", "\\"))
 
 ASCII_CHARACTERS = set(chr(i) for i in range(128))
 DIGITS = set(string.digits)
@@ -679,7 +679,8 @@ def preprocess_range(regexstr: str) -> str:
     # add backslashes to reserved characters
     for character in characters:
         if character in RESERVED_CHARACTERS:
-            new_characters.add(f"\\{character}")
+            new_char = f"\\{character}"
+            new_characters.add(new_char)
         else:
             new_characters.add(character)
     return create_alternatives(new_characters)
@@ -734,11 +735,11 @@ def preprocess_regex(regexstr: str) -> str:
     if contains_xml_unicode(regexstr):
         regexstr = xml_to_python_unicode(regexstr)
 
-    # replace ranges with alternatives
-    regexstr = preprocess_ranges(regexstr)
-
     # replace character classes with alternatives
     regexstr = preprocess_character_classes(regexstr)
+
+    # replace ranges with alternatives
+    regexstr = preprocess_ranges(regexstr)
 
     return regexstr
 
@@ -750,7 +751,6 @@ def parse_regex(regexstr: str, input_symbols: AbstractSet[str]) -> NFARegexBuild
         return NFARegexBuilder.from_string_literal(regexstr, count(0))
 
     regexstr = preprocess_regex(regexstr)
-    print(regexstr)
 
     state_name_counter = count(0)
 

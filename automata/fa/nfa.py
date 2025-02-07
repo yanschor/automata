@@ -207,25 +207,17 @@ class NFA(fa.FA):
         ----------
         regex : str
             The regex to construct an equivalent NFA for.
-        input_symbols : Optional[AbstractSet[str]], default: None
-            The set of input symbols to create the NFA over. If not
-            set, defaults to all non-reserved characters found in the regex.
+        unicode : bool, default: False
+            Whether to create the NFA over all Unicode characters. If False,
+            defaults to all non-reserved ASCII characters found in the regex.
 
         Returns
         ------
         Self
             The NFA accepting the language of the input regex.
         """
-
-        # TODO: rewrite this, should accept either all ASCII or all Unicode
         if input_symbols is None:
-            input_symbols = frozenset(regex) # - RESERVED_CHARACTERS
-        # else:
-        #     conflicting_symbols = RESERVED_CHARACTERS & input_symbols
-        #     if conflicting_symbols:
-        #         raise exceptions.InvalidSymbolError(
-        #             f"Invalid input symbols: {conflicting_symbols}"
-        #         )
+            input_symbols = frozenset(regex)
 
         nfa_builder = parse_regex(regex, input_symbols)
 
