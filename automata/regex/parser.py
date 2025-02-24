@@ -32,12 +32,12 @@ RESERVED_CHARACTERS: frozenset[str] = frozenset(("*", "|", "(", ")", "?", "&", "
 ASCII_CHARACTERS = set(chr(i) for i in range(128))
 DIGITS = set(string.digits)
 LETTERS = set(string.ascii_letters)
-WHITESPACE = set(" \t\n\r\f\v")
+WHITESPACE = set(" \t\r\f\v") # had to remove \n because it was causing issues with the lexer
 CHARACTER_CLASS_TRANSLATIONS = {
     r"\d": DIGITS,
     r"\D": ASCII_CHARACTERS - DIGITS,
     r"\s": WHITESPACE,
-    r"\S": ASCII_CHARACTERS - WHITESPACE,
+    r"\S": ASCII_CHARACTERS - WHITESPACE - set("\n"),
     r"\w": LETTERS | DIGITS | set("_"),
     r"\W": ASCII_CHARACTERS - LETTERS - DIGITS - set("_"),
 }
@@ -708,6 +708,7 @@ def preprocess_character_classes(regexstr: str) -> str:
                 char_class,
                 create_alternatives(CHARACTER_CLASS_TRANSLATIONS[char_class]),
             )
+    print("preprocess_character_classes", regexstr)
     return regexstr
 
 
