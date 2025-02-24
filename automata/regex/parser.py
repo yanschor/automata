@@ -708,7 +708,6 @@ def preprocess_character_classes(regexstr: str) -> str:
                 char_class,
                 create_alternatives(CHARACTER_CLASS_TRANSLATIONS[char_class]),
             )
-    print("preprocess_character_classes", regexstr)
     return regexstr
 
 
