@@ -599,8 +599,8 @@ def get_regex_lexer(
     lexer.register_token(KleeneStarToken.from_match, r"\*")
     lexer.register_token(KleenePlusToken.from_match, r"\+")
     lexer.register_token(OptionToken.from_match, r"\?")
-    lexer.register_token(QuantifierToken.from_match, r"\{(.*?),(.*?)\}")
-    lexer.register_token(SingularQuantifierToken.from_match, r"\{(.*?)\}")
+    lexer.register_token(SingularQuantifierToken.from_match, r"\{(\d+)\}")
+    lexer.register_token(QuantifierToken.from_match, r"\{(\d*?),(\d*?)\}")
     lexer.register_token(
         lambda match: EscapeToken(match.group(1), state_name_counter), r"\\(.)"
     )
