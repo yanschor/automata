@@ -711,10 +711,6 @@ def preprocess_character_classes(regexstr: str) -> str:
     return regexstr
 
 
-def contains_xml_unicode(regex: str) -> bool:
-    return re.search(r"&#x([0-9A-Fa-f]{4});", regex) is not None
-
-
 def xml_to_python_unicode(xml_str: str) -> str:
     """Replace every XML-formatted unicode character in the string with the corresponding python unicode character."""
     # remove linebreaks for now...
@@ -735,11 +731,13 @@ def replacement(match: re.Match) -> str:
 
 def preprocess_regex(regexstr: str) -> str:
     """Preprocess regexstr to support character classes and ranges."""
+    # replace linefeed characters with empty string
+    linefeed_char = chr(10)
+    regexstr = regexstr.replace(linefeed_char, "")
 
     # replace XML-formatted unicode characters with python unicode characters
     # TODO: move this into re2gr module
-    if contains_xml_unicode(regexstr):
-        regexstr = xml_to_python_unicode(regexstr)
+    regexstr = xml_to_python_unicode(regexstr)
 
     # replace character classes with alternatives
     regexstr = preprocess_character_classes(regexstr)
